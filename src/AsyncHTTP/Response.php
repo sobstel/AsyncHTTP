@@ -1,6 +1,6 @@
 <?php
 namespace AsyncHTTP;
 
-class RequestPool
+class Response
 {
 }

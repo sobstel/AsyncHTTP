@@ -1,21 +1,17 @@
 <?php
 namespace AsyncHTTP;
 
-use AsyncHTTP\Exception\SocketException;
-
 class Request
 {
     const GET = "GET";
     const POST = "POST";
     const HEAD = "HEAD";
 
-    const WRITEABLE = 1;
-    const READABLE = 2;
-    const CLOSED = 4;
+    protected $ip;
 
-    protected $status = 0;
+    protected $port;
 
-    protected $http_version = '1.1';
+    protected $socket_domain;
 
     protected $method;
 
@@ -23,9 +19,15 @@ class Request
 
     protected $uri;
 
-    protected $body;
+    protected $http_version = '1.1';
 
-    protected $headers = [];
+    protected $headers = [
+        'User-Agent' => 'AsyncHTTP (https://github.com/sobstel/AsyncHTTP)',
+        'Content-Type' => 'text/plain',
+        'Accept' => '*/*',
+    ];
+
+    protected $body = null;
 
     public function __construct($method, $host, $uri = "/", $ip = null, $port = 80, $socket_domain = \AF_INET)
     {
@@ -33,102 +35,54 @@ class Request
         $this->host = $host;
         $this->uri = $uri;
 
-        $this->socket = socket_create($socket_domain, \SOCK_STREAM, \SOL_TCP);
-
-        $ip = $ip ?: gethostbyname($host);
-        $this->connect($ip, $port);
+        $this->ip = $ip ?: gethostbyname($host);
+        $this->port = $port;
+        $this->socket_domain = $socket_domain;
     }
 
-    public function __destruct()
+    public function setHttpVersion($http_version)
     {
-        $this->close();
+        $this->http_version = (string)$http_version;
+    }
+
+    public function setHeader($name, $value)
+    {
+        $this->headers[$name] = (string)$value;
     }
 
     public function setBody($body)
     {
-        $this->body = $body;
+        $this->body = (string)$body;
     }
 
-
-    public function getSocket()
+    public function getIP()
     {
-        return $this->socket;
+        return $this->ip;
     }
 
-    public function isReadyToSend()
+    public function getPort()
     {
-        if ($this->status & self::WRITEABLE) {
-            return true;
-        }
-
-        $read = $except = null;
-        $write = [$this->socket];
-
-        $writeable = (bool)socket_select($read, $write, $except, 0);
-
-        if ($writeable) {
-            $this->status &= self::WRITEABLE;
-        }
-
-        return $writeable;
+        return $this->port;
     }
 
-    public function send()
+    public function getSocketDomain()
     {
-        $request = sprintf("%s %s HTTP/%s\r\n", $this->method, $this->uri, $this->http_version);
-        $request .= sprintf("Host: %s\r\n", $this->host);
-        $request .= "Accept: */*\r\n";
-        $request .= "User-Agent: test\r\n";
-
-        $request .= "Content-Type: text/plain\r\n";
-
-        if (!empty($this->body)) {
-            $request .= sprintf("Content-Length: %d\r\n", strlen($this->body) + 1);
-            $request .= sprintf("\r\n%s\r\n", $this->body);
-        }
-
-        $request .= "\r\n";
-
-        echo $request;
-
-        $success = socket_write($this->socket, $request);
-
-        if (!$success) {
-            $this->raiseSocketError();
-        }
+        return $this->socket_domain;
     }
 
-    public function close()
+    public function getMessage()
     {
-        if (!($this->status & self::CLOSED)) {
-            socket_close($this->socket);
-            $this->status = self::CLOSED;
-        }
-    }
+        $request_msg = sprintf("%s %s HTTP/%s\r\n", $this->method, $this->uri, $this->http_version);
+        $request_msg .= sprintf("Host: %s\r\n", $this->host);
 
-    protected function connect($ip, $port)
-    {
-        if (!socket_set_nonblock($this->socket)) {
-            $this->raiseSocketError();
+        foreach ($this->headers as $name => $value) {
+            $request_msg .= sprintf("%s: %s\r\n", $name, $value);
         }
 
-        $connected = @socket_connect($this->socket, $ip, $port);
-        if (!$connected) {
-            // http://php.net/manual/en/function.socket-connect.php#refsect1-function.socket-connect-returnvalues
-            // If the socket is non-blocking then socket_connect() function returns FALSE with an error Operation now in progress.
-            $in_progress = (strpos(socket_strerror(socket_last_error()), 'in progress') !== false);
-            if (!$in_progress) {
-                $this->raiseSocketError();
-            }
+        if ($this->body !== null) {
+            $request_msg .= sprintf("Content-Length: %d\r\n\r\n%s", strlen($this->body), $this->body);
         }
-    }
 
-    protected function raiseSocketError()
-    {
-        $errno = socket_last_error($this->socket);
-        $errstr = socket_strerror($errno);
-        $this->close();
-
-        throw new SocketException($errstr, $errno);
+        return $request_msg;
     }
 }
