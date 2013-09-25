@@ -32,8 +32,6 @@ class ConnectionPool implements \IteratorAggregate
 
     public function poke()
     {
-        // $this->log(Logger::DEBUG, "poke()");
-
         $writeable_sockets = $readable_sockets = [];
         $except = null;
 

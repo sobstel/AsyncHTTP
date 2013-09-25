@@ -63,29 +63,19 @@ class Connection
         return $this->status;
     }
 
-    public function isClosed()
-    {
-        return ($this->status === self::CLOSED);
-    }
-
-    public function isWriteOnly()
-    {
-        return $this->write_only;
-    }
-
     public function getSocket()
     {
         return $this->socket;
     }
 
-    protected function createSocket()
-    {
-        $this->socket = socket_create($this->request->getSocketDomain(), \SOCK_STREAM, \SOL_TCP);
-    }
-
     public function getResponse()
     {
         return $this->response;
+    }
+
+    protected function createSocket()
+    {
+        $this->socket = socket_create($this->request->getSocketDomain(), \SOCK_STREAM, \SOL_TCP);
     }
 
     protected function connect()
