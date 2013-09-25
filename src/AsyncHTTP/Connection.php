@@ -2,30 +2,35 @@
 namespace AsyncHTTP;
 
 use AsyncHTTP\Exception\SocketException;
+use Monolog\Logger;
 
 class Connection
 {
-    const NOT_CONNECTED = 0;
-    const READY_TO_SEND_REQUEST = 1;
-    const REQUEST_SENT = 2;
-    const READY_TO_READ_RESPONSE = 3;
-    const RESPONSE_READ = 4;
-    const CLOSED = 5;
+    use Logging;
 
-    protected $request;
-
-    protected $status;
-
-    protected $write_only;
+    const NOT_CONNECTED = 'not_connected';
+    const READY_TO_SEND_REQUEST = 'ready_to_send_request';
+    const REQUEST_SENT = 'request_sent';
+    const READY_TO_READ_RESPONSE = 'ready_to_read_response';
+    const RESPONSE_READ = 'response_read';
+    const CLOSED = 'closed';
 
     protected $socket;
 
-    public function __construct(Request $request)
+    protected $status;
+
+    protected $request;
+
+    protected $response;
+
+    protected $write_only;
+
+    public function __construct(Request $request, $write_only = true)
     {
         $this->request = $request;
 
         $this->status = self::NOT_CONNECTED;
-        $this->write_only = true;
+        $this->write_only = (bool)$write_only;
 
         $this->createSocket();
         $this->connect();
@@ -38,8 +43,8 @@ class Connection
 
     public function close()
     {
-        if ($this->status < self::CLOSED) {
-            // make sure it wasn't closed in-between (async)
+        if ($this->status !== self::CLOSED) {
+            // make sure it hasn't been closed in-between (async)
             if (get_resource_type($this->socket) == "Socket") {
                 socket_close($this->socket);
             }
@@ -50,7 +55,7 @@ class Connection
     public function setStatus($status)
     {
         $this->status = $status;
-        $this->handleStatus();
+        $this->handleStatusChange($status);
     }
 
     public function getStatus()
@@ -58,13 +63,9 @@ class Connection
         return $this->status;
     }
 
-    public function getSocket()
+    public function isClosed()
     {
-        return $this->socket;
-    }
-
-    public function setWriteOnly($write_only = true) {
-        $this->write_only = $write_only;
+        return ($this->status === self::CLOSED);
     }
 
     public function isWriteOnly()
@@ -72,9 +73,19 @@ class Connection
         return $this->write_only;
     }
 
+    public function getSocket()
+    {
+        return $this->socket;
+    }
+
     protected function createSocket()
     {
         $this->socket = socket_create($this->request->getSocketDomain(), \SOCK_STREAM, \SOL_TCP);
+    }
+
+    public function getResponse()
+    {
+        return $this->response;
     }
 
     protected function connect()
@@ -94,10 +105,12 @@ class Connection
         }
     }
 
-    public function handleStatus()
+    protected function handleStatusChange($status)
     {
-        if ($this->status === self::READY_TO_SEND_REQUEST) {
-            $success = @socket_write($this->socket, $this->request->getMessage());
+        $this->log(Logger::DEBUG, sprintf("change status to %s", $status));
+
+        if ($status === self::READY_TO_SEND_REQUEST) {
+            $success = socket_write($this->socket, $this->request->getMessage());
             if (!$success) {
                $this->raiseSocketError();
             }
@@ -106,18 +119,25 @@ class Connection
             return true;
         }
 
-        if ($this->status === self::READY_TO_READ_RESPONSE) {
+        if ($status === self::READY_TO_READ_RESPONSE) {
             if ($this->write_only) {
                 $this->close();
+                return true;
             }
 
-            // TODO: socket_read($this->socket)
+            $message = "";
+            do {
+                $message_chunk = socket_read($this->socket, 8192);
+                $message .= $message_chunk;
+            } while ($message_chunk);
+
+            $this->response = new Response($message);
             $this->setStatus(self::RESPONSE_READ);
 
             return true;
         }
 
-        if ($this->status === self::RESPONSE_READ) {
+        if ($status === self::RESPONSE_READ) {
             $this->close();
 
             return true;

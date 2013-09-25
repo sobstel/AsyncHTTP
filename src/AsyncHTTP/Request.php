@@ -83,6 +83,8 @@ class Request
             $request_msg .= sprintf("Content-Length: %d\r\n\r\n%s", strlen($this->body), $this->body);
         }
 
+        $request_msg .= "\r\n";
+
         return $request_msg;
     }
 }

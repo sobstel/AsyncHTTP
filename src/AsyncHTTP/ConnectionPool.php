@@ -3,18 +3,25 @@ namespace AsyncHTTP;
 
 use AsyncHTTP\Connection;
 use AsyncHTTP\Exception\SocketException;
+use Monolog\Logger;
 
 class ConnectionPool implements \IteratorAggregate
 {
+    use Logging;
+
     protected $connections = [];
 
-    public function create($id, Request $request)
+    public function create($id, Request $request, $write_only = true)
     {
-        $this->set($id, new Connection($request));
+        $this->set($id, new Connection($request, $write_only));
     }
 
     public function set($id, Connection $connection)
     {
+        if ($this->logger) {
+            $connection->enableLogging($this->logger, sprintf('conn (%s)', $id));
+        }
+
         $this->connections[$id] = $connection;
     }
 
@@ -23,13 +30,14 @@ class ConnectionPool implements \IteratorAggregate
         return $this->connections[$id];
     }
 
-    // execute once
-    public function process()
+    public function poke()
     {
+        // $this->log(Logger::DEBUG, "poke()");
+
         $writeable_sockets = $readable_sockets = [];
         $except = null;
 
-        foreach ($this->connections as $connection) {
+        foreach ($this->connections as $id => $connection) {
             if ($connection->getStatus() === Connection::NOT_CONNECTED) {
                 $writeable_sockets[] = $connection->getSocket();
             }
@@ -63,18 +71,18 @@ class ConnectionPool implements \IteratorAggregate
         }
     }
 
-    public function force()
+    public function pokeUntilClosed()
     {
-        $left_to_process = count($this->connections);
+        $connections = $this->connections;
 
         do {
-            foreach ($this->connections as $connection) {
-                $this->process();
+            foreach ($connections as $id => $connection) {
+                $this->poke();
                 if ($connection->getStatus() === Connection::CLOSED) {
-                    $left_to_process =- 1;
+                    unset($connections[$id]);
                 }
             }
-        } while ($left_to_process > 0);
+        } while (count($connections) > 0);
     }
 
     public function getIterator()
