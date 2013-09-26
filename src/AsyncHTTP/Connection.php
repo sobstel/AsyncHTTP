@@ -156,7 +156,8 @@ class Connection
         $connected = @socket_connect($this->socket, $this->request->getIP(), $this->request->getPort());
         if (!$connected) {
             // http://php.net/manual/en/function.socket-connect.php#refsect1-function.socket-connect-returnvalues
-            // If the socket is non-blocking then socket_connect() function returns FALSE with an error Operation now in progress.
+            // If the socket is non-blocking then socket_connect() function returns FALSE
+            // with an error "Operation now in progress".
             $in_progress = (strpos(socket_strerror(socket_last_error()), 'in progress') !== false);
             if (!$in_progress) {
                 $this->raiseSocketError();
@@ -169,7 +170,7 @@ class Connection
         if ($status === self::READY_TO_SEND_REQUEST) {
             $success = socket_write($this->socket, $this->request->getMessage());
             if (!$success) {
-               $this->raiseSocketError();
+                $this->raiseSocketError();
             }
 
             $this->dispatchEvent($status);
