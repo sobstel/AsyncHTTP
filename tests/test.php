@@ -12,7 +12,7 @@ try {
     $request = new Request(Request::POST, 'logs-01.loggly.com', '/inputs/2c7d3caf-bc81-4981-939f-7d0f5e2fbf74/tag/test/');
     $request->setBody(json_encode([
         'type' => 'test',
-        'desc' => 'multi tests, has it actually arrived?',
+        'desc' => php_uname(),
         'rand' => mt_rand()
     ]));
 
