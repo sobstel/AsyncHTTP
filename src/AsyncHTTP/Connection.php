@@ -2,19 +2,19 @@
 namespace AsyncHTTP;
 
 use AsyncHTTP\SocketException;
-use Monolog\Logger;
 use RuntimeException;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 
 class Connection
 {
-    use Logging;
-
     const NOT_CONNECTED = 'not_connected';
     const READY_TO_SEND_REQUEST = 'ready_to_send_request';
     const REQUEST_SENT = 'request_sent';
     const READY_TO_READ_RESPONSE = 'ready_to_read_response';
     const RESPONSE_READ = 'response_read';
     const CLOSED = 'closed';
+
+    protected $id;
 
     protected $start_time;
 
@@ -31,9 +31,15 @@ class Connection
         'write_only' => true,
     ];
 
-    public function __construct(Request $request, array $opts = [])
+    protected $event_dispatcher;
+
+    public function __construct($id, Request $request, array $opts = [])
     {
+        $this->id = $id;
+
         $this->start_time = microtime(true);
+
+        $this->event_dispatcher = new EventDispatcher();
 
         $this->request = $request;
         $this->response = new Response();
@@ -62,6 +68,31 @@ class Connection
             }
             $this->setStatus(self::CLOSED);
         }
+    }
+
+    public function observe($callable, $statuses = [])
+    {
+        $statuses = (array)$statuses;
+
+        if (empty($statuses)) {
+            $statuses = [
+                self::NOT_CONNECTED,
+                self::READY_TO_SEND_REQUEST,
+                self::REQUEST_SENT,
+                self::READY_TO_READ_RESPONSE,
+                self::RESPONSE_READ,
+                self::CLOSED
+            ];
+        }
+
+        foreach ($statuses as $status) {
+            $this->event_dispatcher->addListener($status, $callable);
+        }
+    }
+
+    public function getId()
+    {
+        return $this->id;
     }
 
     public function setStatus($status)
@@ -130,15 +161,20 @@ class Connection
 
     protected function handleStatusChange($status)
     {
-        $this->log(Logger::DEBUG, sprintf("change status to %s", $status));
-
         if ($status === self::READY_TO_SEND_REQUEST) {
             $success = socket_write($this->socket, $this->request->getMessage());
             if (!$success) {
                $this->raiseSocketError();
             }
+
+            $this->dispatchEvent($status);
             $this->setStatus(self::REQUEST_SENT);
 
+            return true;
+        }
+
+        if ($status === self::REQUEST_SENT) {
+            $this->dispatchEvent($status);
             return true;
         }
 
@@ -155,18 +191,30 @@ class Connection
             } while ($message_chunk);
 
             $this->response->parseMessage($message);
+
+            $this->dispatchEvent($status);
             $this->setStatus(self::RESPONSE_READ);
 
             return true;
         }
 
         if ($status === self::RESPONSE_READ) {
+            $this->dispatchEvent($status);
             $this->close();
 
             return true;
         }
 
+        if ($status === self::CLOSED) {
+            $this->dispatchEvent($status);
+        }
+
         return false;
+    }
+
+    protected function dispatchEvent($status)
+    {
+        $this->event_dispatcher->dispatch($status, new StatusChangeEvent($status, $this));
     }
 
     protected function raiseSocketError()

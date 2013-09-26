@@ -1,31 +1,26 @@
 <?php
 namespace AsyncHTTP;
 
+use ArrayIterator;
 use AsyncHTTP\Connection;
 use AsyncHTTP\SocketException;
 use AsyncHTTP\TimeoutException;
-use Monolog\Logger;
+use IteratorAggregate;
 use RuntimeException;
 
-class ConnectionPool implements \IteratorAggregate
+class ConnectionPool implements IteratorAggregate
 {
-    use Logging;
-
     protected $connections = [];
 
     public function create($id, Request $request, array $opts = [])
     {
-        $this->set($id, new Connection($request, $opts));
+        $this->add(new Connection($id, $request, $opts));
         return $this->get($id);
     }
 
-    public function set($id, Connection $connection)
+    public function add(Connection $connection)
     {
-        if ($this->logger) {
-            $connection->enableLogging($this->logger, sprintf('conn (%s)', $id));
-        }
-
-        $this->connections[$id] = $connection;
+        $this->connections[$connection->getId()] = $connection;
     }
 
     public function get($id)
@@ -93,8 +88,21 @@ class ConnectionPool implements \IteratorAggregate
         } while (count($connections) > 0);
     }
 
+    public function observe($callable, $ids = [], $statuses = [])
+    {
+        $ids = (array)$ids;
+
+        if (empty($ids)) {
+            $ids = array_keys($this->connections);
+        }
+
+        foreach ($ids as $id) {
+            $this->get($id)->observe($callable, $statuses);
+        }
+    }
+
     public function getIterator()
     {
-        return new \ArrayIterator($this->connections);
+        return new ArrayIterator($this->connections);
     }
 }
