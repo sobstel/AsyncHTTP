@@ -3,10 +3,13 @@ namespace AsyncHTTP;
 
 class Response
 {
+    /*** var @int HTTP status code */
     protected $status_code;
 
+    /*** @var array */
     protected $headers = [];
 
+    /*** @var string */
     protected $body;
 
     /*** @var \Exception */
@@ -19,13 +22,22 @@ class Response
     {
         $lines = explode("\n", $message);
 
+        $lines_num = count($lines);
+        if ($lines_num == 0) {
+            return false;
+        }
+
         preg_match("/^HTTP\/\d\.\d\s(\d{3})/", $lines[0], $matches);
+        if (!isset($matches[1])) {
+            return false;
+        }
+
         $this->status_code = (int)$matches[1];
 
         $this->headers = [];
         $this->body = null;
 
-        for ($i = 1, $cnt = count($lines); $i < $cnt; $i += 1) {
+        for ($i = 1; $i < $lines_num; $i += 1) {
             $line = trim($lines[$i]);
 
             if (empty($line)) {
@@ -33,8 +45,10 @@ class Response
                 break;
             }
 
-            list($name, $value) = explode(':', $line, 2);
-            $this->headers[trim($name)] = trim($value);
+            if (strpos($line, ":") !== false) {
+                list($name, $value) = explode(':', $line, 2);
+                $this->headers[trim($name)] = trim($value);
+            }
         }
     }
 
