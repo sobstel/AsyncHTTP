@@ -95,6 +95,11 @@ class Connection
         return $this->id;
     }
 
+    public function getStartTime()
+    {
+        return $this->start_time;
+    }
+
     public function setStatus($status)
     {
         $this->status = $status;

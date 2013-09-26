@@ -19,12 +19,19 @@ try {
     $pool = new ConnectionPool();
 
     $pool->create('loggly', $request, ['write_only' => true]);
-    $pool->create('sobstel', new Request(Request::GET, 'sobstel.org', '/'), ['write_only' => true]);
-    $pool->create('example', new Request(Request::GET, 'example.org', '/'), ['write_only' => true]);
+    $pool->create('sobstel', new Request(Request::GET, 'sobstel.org', '/'), ['write_only' => false]);
+    $pool->create('example', new Request(Request::GET, 'example.org', '/'), ['write_only' => false]);
 
     $logger = new Logger('asynchttp');
     $pool->observe(function($event) use ($logger) {
         $logger->log(Logger::DEBUG, sprintf("%s: %s", $event->getConnection()->getId(), $event->getStatus()));
+    });
+
+    $pool->observe(function($event) use ($logger) {
+        $conn = $event->getConnection();
+        if ($conn->getStatus() === Connection::CLOSED) {
+            $logger->log(Logger::DEBUG, sprintf("%s: time spent: %s", $conn->getId(), microtime(true) - $conn->getStartTime()));
+        }
     });
 
     $pool->pokeUntilClosed();
