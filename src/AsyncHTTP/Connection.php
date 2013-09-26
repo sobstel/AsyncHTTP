@@ -1,8 +1,9 @@
 <?php
 namespace AsyncHTTP;
 
-use AsyncHTTP\Exception\SocketException;
+use AsyncHTTP\SocketException;
 use Monolog\Logger;
+use RuntimeException;
 
 class Connection
 {
@@ -15,6 +16,8 @@ class Connection
     const RESPONSE_READ = 'response_read';
     const CLOSED = 'closed';
 
+    protected $start_time;
+
     protected $socket;
 
     protected $status;
@@ -23,14 +26,23 @@ class Connection
 
     protected $response;
 
-    protected $write_only;
+    protected $opts = [
+        'timeout' => 1,
+        'write_only' => true,
+    ];
 
-    public function __construct(Request $request, $write_only = true)
+    public function __construct(Request $request, array $opts = [])
     {
+        $this->start_time = microtime(true);
+
         $this->request = $request;
+        $this->response = new Response();
 
         $this->status = self::NOT_CONNECTED;
-        $this->write_only = (bool)$write_only;
+
+        foreach ($opts as $name => $value) {
+            $this->setOption($name, $value);
+        }
 
         $this->createSocket();
         $this->connect();
@@ -45,7 +57,7 @@ class Connection
     {
         if ($this->status !== self::CLOSED) {
             // make sure it hasn't been closed in-between (async)
-            if (get_resource_type($this->socket) == "Socket") {
+            if ($this->socket && (get_resource_type($this->socket) == "Socket")) {
                 socket_close($this->socket);
             }
             $this->setStatus(self::CLOSED);
@@ -73,9 +85,30 @@ class Connection
         return $this->response;
     }
 
+    public function setOption($name, $value)
+    {
+        $this->opts[$name] = $value;
+    }
+
+    public function getOption($name)
+    {
+        if (!array_key_exists($name, $this->opts)) {
+            throw new RuntimeException(sprintf("invalid option name (%s)", $name));
+        }
+        return $this->opts[$name];
+    }
+
+    public function isTimeoutExceeded()
+    {
+        return (microtime(true) - $this->start_time > $this->getOption('timeout'));
+    }
+
     protected function createSocket()
     {
         $this->socket = socket_create($this->request->getSocketDomain(), \SOCK_STREAM, \SOL_TCP);
+        if (!$this->socket) {
+            $this->raiseSocketError();
+        }
     }
 
     protected function connect()
@@ -110,7 +143,7 @@ class Connection
         }
 
         if ($status === self::READY_TO_READ_RESPONSE) {
-            if ($this->write_only) {
+            if ($this->getOption('write_only')) {
                 $this->close();
                 return true;
             }
@@ -121,7 +154,7 @@ class Connection
                 $message .= $message_chunk;
             } while ($message_chunk);
 
-            $this->response = new Response($message);
+            $this->response->parseMessage($message);
             $this->setStatus(self::RESPONSE_READ);
 
             return true;
@@ -142,6 +175,6 @@ class Connection
         $errstr = socket_strerror($errno);
         $this->close();
 
-        throw new SocketException($errstr, $errno);
+        $this->response->setException(new SocketException($errstr, $errno));
     }
 }

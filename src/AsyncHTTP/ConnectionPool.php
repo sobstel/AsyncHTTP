@@ -2,8 +2,10 @@
 namespace AsyncHTTP;
 
 use AsyncHTTP\Connection;
-use AsyncHTTP\Exception\SocketException;
+use AsyncHTTP\SocketException;
+use AsyncHTTP\TimeoutException;
 use Monolog\Logger;
+use RuntimeException;
 
 class ConnectionPool implements \IteratorAggregate
 {
@@ -11,9 +13,10 @@ class ConnectionPool implements \IteratorAggregate
 
     protected $connections = [];
 
-    public function create($id, Request $request, $write_only = true)
+    public function create($id, Request $request, array $opts = [])
     {
-        $this->set($id, new Connection($request, $write_only));
+        $this->set($id, new Connection($request, $opts));
+        return $this->get($id);
     }
 
     public function set($id, Connection $connection)
@@ -27,6 +30,9 @@ class ConnectionPool implements \IteratorAggregate
 
     public function get($id)
     {
+        if (!array_key_exists($id, $this->connections)) {
+            throw new RuntimeException(sprintf("%s connection does not exist"));
+        }
         return $this->connections[$id];
     }
 
@@ -36,6 +42,10 @@ class ConnectionPool implements \IteratorAggregate
         $except = null;
 
         foreach ($this->connections as $id => $connection) {
+            if ($connection->isTimeoutExceeded()) {
+                $connection->getResponse()->setException(new TimeoutException("connection timeout exceeded"));
+                $connection->close();
+            }
             if ($connection->getStatus() === Connection::NOT_CONNECTED) {
                 $writeable_sockets[] = $connection->getSocket();
             }

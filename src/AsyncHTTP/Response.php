@@ -5,38 +5,37 @@ class Response
 {
     protected $status_code;
 
-    protected $headers;
+    protected $headers = [];
 
     protected $body;
+
+    /*** @var \Exception */
+    protected $exception;
 
     /**
      * @param string Response message
      */
-    public function __construct($message)
+    public function parseMessage($message)
     {
         $lines = explode("\n", $message);
 
         preg_match("/^HTTP\/\d\.\d\s(\d{3})/", $lines[0], $matches);
-        $status_code = (int)$matches[1];
+        $this->status_code = (int)$matches[1];
 
-        $headers = [];
-        $body = null;
+        $this->headers = [];
+        $this->body = null;
 
         for ($i = 1, $cnt = count($lines); $i < $cnt; $i += 1) {
             $line = trim($lines[$i]);
 
             if (empty($line)) {
-                $body = implode("\n", array_slice($lines, $i + 1));
+                $this->body = implode("\n", array_slice($lines, $i + 1));
                 break;
             }
 
             list($name, $value) = explode(':', $line, 2);
-            $headers[trim($name)] = trim($value);
+            $this->headers[trim($name)] = trim($value);
         }
-
-        $this->status_code = $status_code;
-        $this->headers = $headers;
-        $this->body = $body;
     }
 
     public function getStatusCode()
@@ -52,5 +51,20 @@ class Response
     public function getBody()
     {
         return $this->body;
+    }
+
+    public function setException(\Exception $exception)
+    {
+        $this->exception = $exception;
+    }
+
+    public function getException()
+    {
+        return $this->exception;
+    }
+
+    public function hasException()
+    {
+        return ($this->exception !== null);
     }
 }

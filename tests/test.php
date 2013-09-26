@@ -21,9 +21,9 @@ try {
     $pool = new ConnectionPool();
     $pool->enableLogging($logger, 'conn_pool');
 
-    $pool->create('loggly', $request, false);
-    $pool->create('sobstel', new Request(Request::GET, 'sobstel.org', '/'), false);
-    $pool->create('example', new Request(Request::GET, 'example.org', '/'), false);
+    $pool->create('loggly', $request, ['write_only' => true]);
+    $pool->create('sobstel', new Request(Request::GET, 'sobstel.org', '/'), ['write_only' => false]);
+    $pool->create('example', new Request(Request::GET, 'example.org', '/'), ['write_only' => false]);
 
     $pool->pokeUntilClosed();
 

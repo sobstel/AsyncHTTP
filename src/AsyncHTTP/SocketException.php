@@ -1,5 +1,5 @@
 <?php
-namespace AsyncHTTP\Exception;
+namespace AsyncHTTP;
 
 use RuntimeException;
 
