@@ -1,4 +1,7 @@
 {
+    "name": "sobstel/AsyncHTTP",
+    "type": "library",
+    "description": "PHP asynchronous non-blocking HTTP requests",
     "require": {
         "php": ">=5.4.0",
         "monolog/monolog": "1.6.*",
