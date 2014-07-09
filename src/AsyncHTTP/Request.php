@@ -29,6 +29,10 @@ class Request
 
     protected $body = null;
 
+    protected $user = null;
+
+    protected $password = null;
+
     public function __construct($method, $host, $uri = "/", $ip = null, $port = 80, $socket_domain = \AF_INET)
     {
         $this->method = $method;
@@ -55,6 +59,12 @@ class Request
         $this->body = (string)$body;
     }
 
+    public function setUserPassword($user, $password)
+    {
+        $this->user = $user;
+        $this->password = $password;
+    }
+
     public function getIP()
     {
         return $this->ip;
@@ -77,6 +87,10 @@ class Request
 
         foreach ($this->headers as $name => $value) {
             $request_msg .= sprintf("%s: %s\r\n", $name, $value);
+        }
+
+        if ($this->user && $this->password) {
+            $request_msg .= sprintf("Authorization: Basic %s\r\n", base64_encode(sprintf("%s:%s", $this->user, $this->password)));
         }
 
         if ($this->body !== null) {
